@@ -1,0 +1,348 @@
+// Schema de Base de Datos para Sistema SRQD - UNAMAD
+// Sistema de Reclamos, Quejas y Denuncias
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USUARIOS Y AUTENTICACIÓN
+// ============================================================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(OPERATOR)
+  status    UserStatus @default(ACTIVE)
+  phone     String?
+  avatar    String?
+  createdAt DateTime @default(now()) @map("created_at")
+  lastLogin DateTime? @map("last_login")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  casosAsignados Caso[]
+  seguimientos   Seguimiento[]
+  publicaciones  Publicacion[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  OPERATOR
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+// ============================================================================
+// ROLES DEL SISTEMA
+// ============================================================================
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  permissions Json     @default("{}")
+  isSystem    Boolean  @default(false) @map("is_system")
+  usersCount  Int      @default(0) @map("users_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+// ============================================================================
+// SEDES Y DEPENDENCIAS
+// ============================================================================
+
+model Sede {
+  id        String   @id @default(uuid())
+  nombre    String
+  direccion String?
+  telefono  String?
+  email     String?
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  dependencias Dependencia[]
+
+  @@map("sedes")
+}
+
+model Dependencia {
+  id          String   @id @default(uuid())
+  nombre      String
+  descripcion String?
+  jefe        String?
+  sedeId      String   @map("sede_id")
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  sede Sede @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+
+  @@map("dependencias")
+}
+
+// ============================================================================
+// CASOS SRQD (SISTEMA PRINCIPAL)
+// ============================================================================
+
+model Caso {
+  id                  String         @id @default(uuid())
+  codigo              String         @unique
+  tipo                CasoTipo
+  estado              CasoEstado     @default(PENDIENTE)
+  prioridad           CasoPrioridad  @default(MEDIA)
+
+  // Fechas
+  fechaCreacion       DateTime       @default(now()) @map("fecha_creacion")
+  fechaActualizacion  DateTime       @updatedAt @map("fecha_actualizacion")
+  fechaLimite         DateTime?      @map("fecha_limite")
+  fechaResolucion     DateTime?      @map("fecha_resolucion")
+
+  // Descripción
+  descripcionHechos   String         @map("descripcion_hechos") @db.Text
+  derechosAfectados   String         @map("derechos_afectados") @db.Text
+
+  // Gestión
+  asignadoA           String?        @map("asignado_a")
+  asignadoNombre      String?        @map("asignado_nombre")
+
+  // Resolución
+  resolucion          String?        @db.Text
+  recomendaciones     String?        @db.Text
+
+  // Metadatos
+  esAnonimo           Boolean        @default(false) @map("es_anonimo")
+  requiereMediacion   Boolean        @default(false) @map("requiere_mediacion")
+  esConfidencial      Boolean        @default(false) @map("es_confidencial")
+  etiquetas           String[]       @default([])
+
+  // Relaciones
+  asignado      User?         @relation(fields: [asignadoA], references: [id])
+  reclamante    Reclamante?
+  reclamado     Reclamado?
+  seguimientos  Seguimiento[]
+  archivos      Archivo[]
+
+  @@index([codigo])
+  @@index([estado])
+  @@index([tipo])
+  @@index([asignadoA])
+  @@map("casos")
+}
+
+enum CasoTipo {
+  RECLAMO
+  QUEJA
+  DENUNCIA
+}
+
+enum CasoEstado {
+  PENDIENTE
+  EN_REVISION
+  EN_PROCESO
+  RESUELTO
+  ARCHIVADO
+  RECHAZADO
+}
+
+enum CasoPrioridad {
+  BAJA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+// ============================================================================
+// RECLAMANTE
+// ============================================================================
+
+model Reclamante {
+  id                     String       @id @default(uuid())
+  casoId                 String       @unique @map("caso_id")
+  rolReclamante          RolUsuario   @map("rol_reclamante")
+  tipoDocumento          TipoDocumento @map("tipo_documento")
+  numeroDocumento        String       @map("numero_documento")
+  nombres                String
+  apellidoPaterno        String       @map("apellido_paterno")
+  apellidoMaterno        String       @map("apellido_materno")
+  sexo                   Sexo
+  celular                String
+  domicilio              String       @db.Text
+  correo                 String
+  autorizacionCorreo     Boolean      @map("autorizacion_correo")
+  documentoIdentidadUrl  String?      @map("documento_identidad_url")
+
+  // Campos condicionales según rol
+  carreraProfesional     String?      @map("carrera_profesional")
+  codigoUniversitario    String?      @map("codigo_universitario")
+  semestreEgreso         String?      @map("semestre_egreso")
+  facultad               String?
+  departamentoAcademico  String?      @map("departamento_academico")
+  oficinaAdministrativa  String?      @map("oficina_administrativa")
+  cargo                  String?
+
+  // Relación
+  caso Caso @relation(fields: [casoId], references: [id], onDelete: Cascade)
+
+  @@map("reclamantes")
+}
+
+// ============================================================================
+// RECLAMADO
+// ============================================================================
+
+model Reclamado {
+  id                     String      @id @default(uuid())
+  casoId                 String      @unique @map("caso_id")
+  rolReclamado           RolUsuario  @map("rol_reclamado")
+  nombres                String
+  apellidoPaterno        String      @map("apellido_paterno")
+  apellidoMaterno        String      @map("apellido_materno")
+  sexo                   Sexo?
+  correo                 String?
+  celular                String?
+
+  // Campos condicionales según rol
+  carreraProfesional     String?     @map("carrera_profesional")
+  codigoUniversitario    String?     @map("codigo_universitario")
+  departamentoAcademico  String?     @map("departamento_academico")
+  oficinaAdministrativa  String?     @map("oficina_administrativa")
+  cargo                  String?
+
+  // Relación
+  caso Caso @relation(fields: [casoId], references: [id], onDelete: Cascade)
+
+  @@map("reclamados")
+}
+
+enum RolUsuario {
+  ESTUDIANTE
+  EGRESADO
+  DOCENTE
+  ADMINISTRATIVO
+  EXTERNO
+}
+
+enum TipoDocumento {
+  DNI
+  CARNET_EXTRANJERIA
+  PASAPORTE
+}
+
+enum Sexo {
+  MASCULINO
+  FEMENINO
+}
+
+// ============================================================================
+// SEGUIMIENTOS
+// ============================================================================
+
+model Seguimiento {
+  id              String      @id @default(uuid())
+  casoId          String      @map("caso_id")
+  fecha           DateTime    @default(now())
+  usuarioId       String?     @map("usuario_id")
+  usuarioNombre   String      @map("usuario_nombre")
+  accion          String
+  comentario      String      @db.Text
+  estadoAnterior  CasoEstado? @map("estado_anterior")
+  estadoNuevo     CasoEstado? @map("estado_nuevo")
+  esVisible       Boolean     @default(true) @map("es_visible")
+
+  // Relaciones
+  caso     Caso       @relation(fields: [casoId], references: [id], onDelete: Cascade)
+  usuario  User?      @relation(fields: [usuarioId], references: [id])
+  archivos Archivo[]  // Archivos adjuntos a este seguimiento
+
+  @@index([casoId])
+  @@map("seguimientos")
+}
+
+// ============================================================================
+// ARCHIVOS
+// ============================================================================
+
+model Archivo {
+  id             String           @id @default(uuid())
+  casoId         String?          @map("caso_id") // Opcional: permite archivos sin caso (ej: publicaciones)
+  seguimientoId  String?          @map("seguimiento_id") // Opcional: archivo asociado a un seguimiento específico
+  nombre         String
+  url            String
+  tipo           String
+  tamano         Int
+  categoria      CategoriaArchivo @default(PRUEBA_DOCUMENTAL)
+  fechaSubida    DateTime         @default(now()) @map("fecha_subida")
+
+  // Relaciones
+  caso         Caso?         @relation(fields: [casoId], references: [id], onDelete: Cascade)
+  seguimiento  Seguimiento?  @relation(fields: [seguimientoId], references: [id], onDelete: Cascade)
+
+  @@index([casoId])
+  @@index([seguimientoId])
+  @@map("archivos")
+}
+
+enum CategoriaArchivo {
+  DOCUMENTO_IDENTIDAD
+  PRUEBA_DOCUMENTAL
+  PDF_GENERADO
+  FIRMA_DIGITAL
+  ARCHIVO_SEGUIMIENTO
+  PUBLICACION_IMAGEN
+  PUBLICACION_DOCUMENTO
+}
+
+// ============================================================================
+// PUBLICACIONES
+// ============================================================================
+
+model Publicacion {
+  id                String            @id @default(uuid())
+  titulo            String
+  descripcion       String            @db.Text
+  imagenUrl         String?           @map("imagen_url")
+  documentoUrl      String?           @map("documento_url")
+  creadoPor         String            @map("creado_por")
+  fechaPublicacion  DateTime          @default(now()) @map("fecha_publicacion")
+  fechaExpiracion   DateTime?         @map("fecha_expiracion")
+  activo            Boolean           @default(true)
+  prioridad         Int               @default(0)
+  tipo              TipoPublicacion   @default(ANUNCIO)
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  // Relaciones
+  creador  User  @relation(fields: [creadoPor], references: [id], onDelete: Cascade)
+
+  @@index([creadoPor])
+  @@index([activo])
+  @@index([fechaExpiracion])
+  @@map("publicaciones")
+}
+
+enum TipoPublicacion {
+  ANUNCIO
+  COMUNICADO
+  EVENTO
+  NOTICIA
+}
