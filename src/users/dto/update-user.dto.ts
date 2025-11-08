@@ -1,5 +1,5 @@
-import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
-import { UserRole, UserStatus } from '@prisma/client';
+import { IsEmail, IsEnum, IsOptional, IsString, IsUUID, MinLength, IsDateString } from 'class-validator';
+import { UserStatus, TipoDocumento } from '@prisma/client';
 
 export class UpdateUserDto {
   @IsEmail({}, { message: 'Email inválido' })
@@ -15,9 +15,9 @@ export class UpdateUserDto {
   @IsOptional()
   name?: string;
 
-  @IsEnum(UserRole, { message: 'Rol inválido' })
+  @IsUUID('4', { message: 'ID de rol inválido' })
   @IsOptional()
-  role?: UserRole;
+  roleId?: string;
 
   @IsEnum(UserStatus, { message: 'Estado inválido' })
   @IsOptional()
@@ -30,4 +30,34 @@ export class UpdateUserDto {
   @IsString({ message: 'El avatar debe ser una URL' })
   @IsOptional()
   avatar?: string;
+
+  // Información de perfil personal
+  @IsEnum(TipoDocumento, { message: 'Tipo de documento inválido' })
+  @IsOptional()
+  tipoDocumento?: TipoDocumento;
+
+  @IsString({ message: 'El número de documento debe ser un texto' })
+  @IsOptional()
+  numeroDocumento?: string;
+
+  @IsDateString({}, { message: 'Fecha de nacimiento inválida' })
+  @IsOptional()
+  fechaNacimiento?: string;
+
+  @IsString({ message: 'La dirección debe ser un texto' })
+  @IsOptional()
+  direccion?: string;
+
+  // Información profesional/laboral
+  @IsString({ message: 'El cargo debe ser un texto' })
+  @IsOptional()
+  cargo?: string;
+
+  @IsUUID('4', { message: 'ID de sede inválido' })
+  @IsOptional()
+  sedeId?: string;
+
+  @IsUUID('4', { message: 'ID de dependencia inválido' })
+  @IsOptional()
+  dependenciaId?: string;
 }

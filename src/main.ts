@@ -17,9 +17,30 @@ async function bootstrap() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-  // Configurar CORS
+  // Configurar CORS - permitir múltiples orígenes
+  const allowedOrigins = [
+    'http://localhost:5173',  // Vite dev
+    'http://localhost:4173',  // Vite preview
+    'http://localhost:3001',  // Otro puerto común
+  ];
+
+  // Si existe CORS_ORIGIN en env, agregarlo a la lista
+  if (process.env.CORS_ORIGIN) {
+    allowedOrigins.push(process.env.CORS_ORIGIN);
+  }
+
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Permitir requests sin origin (como Postman, curl, etc)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        console.warn('⚠️  CORS blocked origin:', origin);
+        callback(null, false);
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],

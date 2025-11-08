@@ -15,11 +15,72 @@ async function main() {
   await prisma.caso.deleteMany();
   await prisma.dependencia.deleteMany();
   await prisma.sede.deleteMany();
-  await prisma.role.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.role.deleteMany();
 
   // ============================================================================
-  // USUARIOS (con passwords hasheados)
+  // ROLES DEL SISTEMA (crear primero)
+  // ============================================================================
+  console.log('🎭 Creating roles...');
+
+  const adminRole = await prisma.role.create({
+    data: {
+      name: 'Administrador',
+      description: 'Control total del sistema',
+      permissions: {
+        casos: ['create', 'read', 'edit', 'delete', 'export'],
+        users: ['create', 'read', 'edit', 'delete'],
+        publicaciones: ['create', 'read', 'edit', 'delete'],
+        estadisticas: ['read', 'export'],
+        roles: ['create', 'read', 'edit', 'delete'],
+        sedes: ['create', 'read', 'edit', 'delete'],
+        dependencias: ['create', 'read', 'edit', 'delete'],
+      },
+      isSystem: true,
+      usersCount: 0,
+    },
+  });
+
+  const supervisorRole = await prisma.role.create({
+    data: {
+      name: 'Supervisor',
+      description: 'Supervisa y gestiona casos SRQD',
+      permissions: {
+        casos: ['create', 'read', 'edit', 'export'],
+        users: ['read'],
+        publicaciones: ['create', 'read', 'edit'],
+        estadisticas: ['read', 'export'],
+        roles: ['read'],
+        sedes: ['read'],
+        dependencias: ['read'],
+      },
+      isSystem: true,
+      usersCount: 0,
+    },
+  });
+
+  const operadorRole = await prisma.role.create({
+    data: {
+      name: 'Operador',
+      description: 'Gestión básica de casos',
+      permissions: {
+        casos: ['create', 'read', 'edit'],
+        users: [],
+        publicaciones: ['read'],
+        estadisticas: ['read'],
+        roles: [],
+        sedes: ['read'],
+        dependencias: ['read'],
+      },
+      isSystem: true,
+      usersCount: 0,
+    },
+  });
+
+  console.log(`✅ Created 3 roles`);
+
+  // ============================================================================
+  // USUARIOS (con passwords hasheados y roleId)
   // ============================================================================
   console.log('👥 Creating users...');
 
@@ -28,7 +89,7 @@ async function main() {
       email: 'defensoria@unamad.edu.pe',
       password: await bcrypt.hash('defensoria123', 10),
       name: 'Defensoría Universitaria',
-      role: 'ADMIN' as const,
+      roleId: adminRole.id,
       status: 'ACTIVE' as const,
       phone: '+51 986 092 679',
     },
@@ -36,7 +97,7 @@ async function main() {
       email: 'admin@unamad.edu.pe',
       password: await bcrypt.hash('admin123', 10),
       name: 'Administrador del Sistema',
-      role: 'ADMIN' as const,
+      roleId: adminRole.id,
       status: 'ACTIVE' as const,
       phone: '+51 999 888 777',
     },
@@ -44,7 +105,7 @@ async function main() {
       email: 'supervisor@unamad.edu.pe',
       password: await bcrypt.hash('supervisor123', 10),
       name: 'Supervisor SRQD',
-      role: 'SUPERVISOR' as const,
+      roleId: supervisorRole.id,
       status: 'ACTIVE' as const,
       phone: '+51 999 888 666',
     },
@@ -52,7 +113,7 @@ async function main() {
       email: 'operador1@unamad.edu.pe',
       password: await bcrypt.hash('operador123', 10),
       name: 'María González',
-      role: 'OPERATOR' as const,
+      roleId: operadorRole.id,
       status: 'ACTIVE' as const,
       phone: '+51 999 888 555',
     },
@@ -60,7 +121,7 @@ async function main() {
       email: 'operador2@unamad.edu.pe',
       password: await bcrypt.hash('operador123', 10),
       name: 'Juan Pérez',
-      role: 'OPERATOR' as const,
+      roleId: operadorRole.id,
       status: 'ACTIVE' as const,
       phone: '+51 999 888 444',
     },
@@ -68,7 +129,7 @@ async function main() {
       email: 'demo@unamad.edu.pe',
       password: await bcrypt.hash('demo123', 10),
       name: 'Usuario Demo',
-      role: 'ADMIN' as const,
+      roleId: adminRole.id,
       status: 'ACTIVE' as const,
       phone: '+51 999 888 333',
     },
@@ -80,61 +141,19 @@ async function main() {
 
   console.log(`✅ Created ${usuarios.length} users`);
 
-  // ============================================================================
-  // ROLES DEL SISTEMA
-  // ============================================================================
-  console.log('🎭 Creating roles...');
-
-  const roles = [
-    {
-      name: 'Administrador',
-      description: 'Control total del sistema',
-      permissions: JSON.parse(
-        JSON.stringify({
-          casos: ['create', 'read', 'update', 'delete'],
-          users: ['create', 'read', 'update', 'delete'],
-          roles: ['create', 'read', 'update', 'delete'],
-          sedes: ['create', 'read', 'update', 'delete'],
-          dependencias: ['create', 'read', 'update', 'delete'],
-        }),
-      ),
-      isSystem: true,
-      usersCount: 3,
-    },
-    {
-      name: 'Supervisor',
-      description: 'Supervisa y gestiona casos SRQD',
-      permissions: JSON.parse(
-        JSON.stringify({
-          casos: ['create', 'read', 'update'],
-          users: ['read'],
-          roles: ['read'],
-          sedes: ['read'],
-          dependencias: ['read'],
-        }),
-      ),
-      isSystem: true,
-      usersCount: 1,
-    },
-    {
-      name: 'Operador',
-      description: 'Gestión básica de casos',
-      permissions: JSON.parse(
-        JSON.stringify({
-          casos: ['create', 'read', 'update'],
-          users: ['read'],
-        }),
-      ),
-      isSystem: true,
-      usersCount: 2,
-    },
-  ];
-
-  for (const role of roles) {
-    await prisma.role.create({ data: role });
-  }
-
-  console.log(`✅ Created ${roles.length} roles`);
+  // Actualizar contadores de usuarios en roles
+  await prisma.role.update({
+    where: { id: adminRole.id },
+    data: { usersCount: 3 },
+  });
+  await prisma.role.update({
+    where: { id: supervisorRole.id },
+    data: { usersCount: 1 },
+  });
+  await prisma.role.update({
+    where: { id: operadorRole.id },
+    data: { usersCount: 2 },
+  });
 
   // ============================================================================
   // SEDES UNIVERSITARIAS
@@ -240,15 +259,15 @@ async function main() {
   console.log('\n✨ Seeding completed successfully!\n');
   console.log('📊 Summary:');
   console.log(`   - ${usuarios.length} users created`);
-  console.log(`   - ${roles.length} roles created`);
+  console.log(`   - 3 roles created`);
   console.log(`   - ${sedes.length} sedes created`);
   console.log(`   - ${dependencias.length} dependencias created`);
   console.log('\n🔐 Login credentials:');
-  console.log('   - defensoria@unamad.edu.pe / defensoria123 (Admin)');
-  console.log('   - admin@unamad.edu.pe / admin123 (Admin)');
+  console.log('   - defensoria@unamad.edu.pe / defensoria123 (Administrador)');
+  console.log('   - admin@unamad.edu.pe / admin123 (Administrador)');
   console.log('   - supervisor@unamad.edu.pe / supervisor123 (Supervisor)');
-  console.log('   - operador1@unamad.edu.pe / operador123 (Operator)');
-  console.log('   - demo@unamad.edu.pe / demo123 (Admin)');
+  console.log('   - operador1@unamad.edu.pe / operador123 (Operador)');
+  console.log('   - demo@unamad.edu.pe / demo123 (Administrador)');
   console.log('');
 }
 

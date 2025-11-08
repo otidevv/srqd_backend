@@ -74,45 +74,15 @@ export class ArchivosService {
                           file.originalname.startsWith('QUEJA-') ||
                           file.originalname.startsWith('DENUNCIA-'));
 
-    console.log('🔍 Verificando si enviar correo...');
-    console.log('  - Tipo de archivo:', file.mimetype);
-    console.log('  - Nombre archivo:', file.originalname);
-    console.log('  - Es constancia:', esConstancia);
-    console.log('  - Código del caso:', caso.codigo);
-    console.log('  - Tiene reclamante:', !!caso.reclamante);
-    console.log('  - Correo reclamante:', caso.reclamante?.correo);
-    console.log('  - Autorización correo:', caso.reclamante?.autorizacionCorreo);
-
+    // Enviar correo de forma asíncrona (no bloquear respuesta HTTP)
     if (
       esConstancia &&
       caso.reclamante?.correo &&
       caso.reclamante?.autorizacionCorreo
     ) {
-      try {
-        console.log('📧 Enviando constancia automáticamente por correo...');
-
-        // Leer el archivo PDF del disco
-        const filePath = path.join(this.uploadPath, file.filename);
-        const pdfBuffer = await readFileAsync(filePath);
-
-        // Enviar el correo
-        const nombreCompleto = `${caso.reclamante.nombres} ${caso.reclamante.apellidoPaterno} ${caso.reclamante.apellidoMaterno}`;
-
-        await this.mailService.enviarConstancia(
-          caso.reclamante.correo,
-          nombreCompleto,
-          caso.codigo,
-          pdfBuffer,
-        );
-
-        console.log(`✅ Constancia enviada automáticamente a ${caso.reclamante.correo}`);
-      } catch (emailError) {
-        console.error('❌ Error al enviar correo automáticamente:', emailError);
-        // No lanzar error, ya que el archivo se subió correctamente
-        // El envío de correo es una funcionalidad adicional
-      }
-    } else {
-      console.log('⏭️  No se enviará correo (no es constancia o no cumple condiciones)');
+      // Fire-and-forget: no esperar el envío de correo
+      this.enviarConstanciaAsync(file.filename, caso)
+        .catch(error => console.error('Error al enviar correo:', error));
     }
 
     return {
@@ -120,6 +90,29 @@ export class ArchivosService {
       data: archivo,
       message: 'Archivo subido exitosamente',
     };
+  }
+
+  /**
+   * Envía la constancia por correo de forma asíncrona (background)
+   * Este método no bloquea la respuesta HTTP del upload
+   */
+  private async enviarConstanciaAsync(filename: string, caso: any): Promise<void> {
+    try {
+      const filePath = path.join(this.uploadPath, filename);
+      const pdfBuffer = await readFileAsync(filePath);
+
+      const nombreCompleto = `${caso.reclamante.nombres} ${caso.reclamante.apellidoPaterno} ${caso.reclamante.apellidoMaterno}`;
+
+      await this.mailService.enviarConstancia(
+        caso.reclamante.correo,
+        nombreCompleto,
+        caso.codigo,
+        pdfBuffer,
+      );
+    } catch (error) {
+      // Los errores ya se manejan en el .catch() del llamador
+      throw error;
+    }
   }
 
   /**
