@@ -22,11 +22,14 @@ async function bootstrap() {
     'http://localhost:5173',  // Vite dev
     'http://localhost:4173',  // Vite preview
     'http://localhost:3001',  // Otro puerto común
+    'https://denuncia.unamad.edu.pe',  // Frontend producción
   ];
 
   // Si existe CORS_ORIGIN en env, agregarlo a la lista
   if (process.env.CORS_ORIGIN) {
-    allowedOrigins.push(process.env.CORS_ORIGIN);
+    // Puede ser una lista separada por comas
+    const envOrigins = process.env.CORS_ORIGIN.split(',').map(o => o.trim());
+    allowedOrigins.push(...envOrigins);
   }
 
   app.enableCors({
@@ -44,6 +47,19 @@ async function bootstrap() {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+  });
+
+  // Headers de seguridad adicionales para producción
+  app.use((req, res, next) => {
+    // Prevenir clickjacking
+    res.setHeader('X-Frame-Options', 'DENY');
+    // Prevenir MIME type sniffing
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // XSS Protection
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    // Referrer Policy
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
   });
 
   // Prefijo global para todas las rutas
